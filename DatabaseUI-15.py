@@ -4,12 +4,36 @@
 # In[2]:
 
 
+# In[2]:
 import streamlit as st
 import pandas as pd
+import numpy as np
+import librosa
+import soundfile as sf
+import io
+from scipy.io import wavfile
+
+# ---------- PASSWORD PROTECTION ---------- #
+PASSWORD = "Krish2025"  # Change this to your desired password
+
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    st.title("🔒 Secure Access")
+    password_input = st.text_input("Enter the password to access this page:", type="password")
+
+    if st.button("Submit"):
+        if password_input == PASSWORD:
+            st.session_state.authenticated = True
+            st.success("Access granted!")
+        else:
+            st.error("Incorrect password.")
+    st.stop()
 
 # ---------- CONFIGURE PAGE ---------- #
 st.set_page_config(
-    page_title="Data Access Room",
+    page_title="Krish GPT",
     layout="wide",
     initial_sidebar_state="auto"
 )
@@ -79,7 +103,15 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------- PAGE NAVIGATION ---------- #
-page = st.selectbox("Choose a Section", ["Neurogram Finder", "Central Database", "Add New Recording", "Functional Data"])
+page = st.selectbox("Choose a Section", [
+    "Neurogram Finder",
+    "Central Database",
+    "Add New Recording",
+    "Functional Data",
+    "Scramble Audio",
+    "Change Carrier Frequency" 
+])
+
 
 # ---------- PAGE: FINDER ---------- #
 if page == "Neurogram Finder":
@@ -199,9 +231,8 @@ elif page == "Add New Recording":
 # ---------- PAGE: FUNCTIONAL DATA ---------- #
 elif page == "Functional Data":
     st.markdown("<div class='section-title'>Functional Data Search</div>", unsafe_allow_html=True)
-    df = st.session_state.df  # You will replace this with your functional data CSV later
+    df = st.session_state.df
 
-    # Placeholder filters - update keys and options once you provide CSV
     questions = sorted(df["Question"].dropna().unique()) if "Question" in df.columns else ["Q1", "Q2", "Q3"]
     question = st.selectbox("Select Question", ["All"] + questions)
 
@@ -221,7 +252,6 @@ elif page == "Functional Data":
     researchers = sorted(df["Researcher"].dropna().unique()) if "Researcher" in df.columns else ["Researcher A", "Researcher B"]
     researcher = st.selectbox("Researcher", ["All"] + researchers)
 
-    # Filtering logic (placeholder)
     filtered = df.copy()
     if question != "All" and "Question" in filtered.columns:
         filtered = filtered[filtered["Question"] == question]
@@ -257,9 +287,112 @@ elif page == "Functional Data":
                         else:
                             st.markdown(f"**{col.strip()}:** {val}")
 
+# ---------- PAGE: SCRAMBLE AUDIO ---------- #
+elif page == "Scramble Audio":
+    st.markdown("<div class='section-title'>Scramble Uploaded Audio</div>", unsafe_allow_html=True)
 
-# In[ ]:
+    uploaded_file = st.file_uploader("Upload a .wav file to scramble", type=["wav"])
 
+    segment_duration = st.number_input(
+        "Scramble Segment Duration (in seconds)", 
+        min_value=0.001, 
+        max_value=1.0, 
+        value=0.05, 
+        step=0.001, 
+        format="%.3f"
+    )
+
+    if uploaded_file is not None:
+        def scramble_audio_bytes(input_file, segment_duration):
+            import tempfile
+
+            # Save uploaded file to a temp file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+                tmp.write(input_file.read())
+                tmp_path = tmp.name
+
+            sr, audio = wavfile.read(tmp_path)
+            audio = audio.astype(np.float32) / np.max(np.abs(audio))  # normalize
+
+            segment_samples = int(segment_duration * sr)
+            segments = [audio[i:i + segment_samples] for i in range(0, len(audio), segment_samples)]
+            np.random.shuffle(segments)
+            scrambled_audio = np.concatenate(segments)
+
+            buffer = io.BytesIO()
+            sf.write(buffer, scrambled_audio, sr, format='WAV')
+            buffer.seek(0)
+            return buffer
+
+        if st.button("Scramble Audio"):
+            scrambled_wav = scramble_audio_bytes(uploaded_file, segment_duration)
+            st.success(f"Audio scrambled using {segment_duration:.3f} sec segments!")
+            st.audio(scrambled_wav, format='audio/wav')
+            st.download_button(
+                label="Download Scrambled Audio",
+                data=scrambled_wav,
+                file_name="scrambled_audio.wav",
+                mime="audio/wav"
+            )
+# ---------- PAGE: CHANGE CARRIER FREQUENCY ---------- #
+elif page == "Change Carrier Frequency":
+    st.markdown("<div class='section-title'>Carrier Frequency Modulation</div>", unsafe_allow_html=True)
+
+    uploaded_file = st.file_uploader("Upload a .wav file to modulate", type=["wav"])
+
+    carrier_freq = st.number_input(
+        "Carrier Frequency (Hz)",
+        min_value=100.0,
+        max_value=50000.0,
+        value=15000.0,
+        step=100.0,
+        format="%.1f"
+    )
+
+    if uploaded_file is not None:
+        def apply_am_carrier(input_file, carrier_freq):
+            import tempfile
+            from scipy.io import wavfile
+
+            # Save uploaded file to disk temporarily
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+                tmp.write(input_file.read())
+                tmp_path = tmp.name
+
+            sr, audio = wavfile.read(tmp_path)
+
+            # Handle stereo
+            if audio.ndim > 1:
+                audio = audio.mean(axis=1)
+
+            # Normalize
+            audio = audio.astype(np.float32)
+            audio /= np.max(np.abs(audio))
+
+            t = np.arange(len(audio)) / sr
+            carrier = np.cos(2 * np.pi * carrier_freq * t)
+
+            # Apply amplitude modulation
+            modulated = audio * carrier
+
+            # Re-normalize
+            modulated /= np.max(np.abs(modulated))
+
+            buffer = io.BytesIO()
+            sf.write(buffer, modulated, sr, format='WAV')
+            buffer.seek(0)
+            return buffer
+
+        if st.button("Modulate Audio"):
+            modulated_wav = apply_am_carrier(uploaded_file, carrier_freq)
+            st.success(f"Audio modulated with {carrier_freq:.1f} Hz carrier!")
+            st.audio(modulated_wav, format='audio/wav')
+            st.download_button(
+                label="Download Modulated Audio",
+                data=modulated_wav,
+                file_name=f"modulated_{int(carrier_freq)}Hz.wav",
+                mime="audio/wav"
+            )
 
 
 
