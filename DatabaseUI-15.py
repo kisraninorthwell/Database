@@ -98,7 +98,7 @@ if "df" not in st.session_state:
 
 # ---------- HEADER ---------- #
 st.markdown("""
-    <h1 style='text-align: center;'>Data Access Room</h1>
+    <h1 style='text-align: center;'>Krish GPT</h1>
 """, unsafe_allow_html=True)
 
 # ---------- PAGE NAVIGATION ---------- #
