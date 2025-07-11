@@ -8,7 +8,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import librosa
 import soundfile as sf
 import io
 from scipy.io import wavfile
